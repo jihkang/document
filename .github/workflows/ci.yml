@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  prevent-direct-push:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    steps:
+      - name: Block direct pushes to protected branches
+        run: |
+          echo "❌ Direct pushes to 'main' or 'dev' are not allowed. Please use a pull request."
+          exit 1
+
+  python-build:
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev'))
+      && hashFiles('poetry.lock') != ''
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            ~/.cache/pip
+          key: ${{ runner.os }}-uv-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies using uv
+        run: uv pip install
+
+      - name: Run Python tests
+        run: uv pip run pytest tests/
+
+  node-build:
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev'))
+      && hashFiles('ts/package-lock.json') != ''
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Node.js dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('ts/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Node dependencies
+        run: npm ci
+        working-directory: ./ts
+
+      - name: Build TypeScript
+        run: npm run build
+        working-directory: ./ts
+
+      - name: Run TypeScript tests
+        run: npm test
+        working-directory: ./ts
