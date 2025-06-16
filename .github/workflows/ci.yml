@@ -18,19 +18,28 @@ jobs:
 
   python-build:
     runs-on: ubuntu-latest
-    if: >
-      (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev'))
-      && hashFiles('poetry.lock') != ''
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check for poetry.lock
+        id: lockfile-check
+        run: |
+          if [[ -f poetry.lock ]]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up Python
+        if: steps.lockfile-check.outputs.exists == 'true'
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
       - name: Cache Python dependencies
+        if: steps.lockfile-check.outputs.exists == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -41,34 +50,47 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install Poetry
+        if: steps.lockfile-check.outputs.exists == 'true'
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install uv
+        if: steps.lockfile-check.outputs.exists == 'true'
         run: pip install uv
 
       - name: Install dependencies using uv
+        if: steps.lockfile-check.outputs.exists == 'true'
         run: uv pip install
 
       - name: Run Python tests
+        if: steps.lockfile-check.outputs.exists == 'true'
         run: uv pip run pytest tests/
 
   node-build:
     runs-on: ubuntu-latest
-    if: >
-      (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev'))
-      && hashFiles('ts/package-lock.json') != ''
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check for package-lock.json
+        id: node-lockfile-check
+        run: |
+          if [[ -f ts/package-lock.json ]]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up Node.js
+        if: steps.node-lockfile-check.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Cache Node.js dependencies
+        if: steps.node-lockfile-check.outputs.exists == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.npm
@@ -77,13 +99,16 @@ jobs:
             ${{ runner.os }}-node-
 
       - name: Install Node dependencies
+        if: steps.node-lockfile-check.outputs.exists == 'true'
         run: npm ci
         working-directory: ./ts
 
       - name: Build TypeScript
+        if: steps.node-lockfile-check.outputs.exists == 'true'
         run: npm run build
         working-directory: ./ts
 
       - name: Run TypeScript tests
+        if: steps.node-lockfile-check.outputs.exists == 'true'
         run: npm test
         working-directory: ./ts
